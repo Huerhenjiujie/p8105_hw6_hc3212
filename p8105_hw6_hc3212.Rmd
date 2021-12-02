@@ -48,8 +48,7 @@ baby_df =
   dplyr::select(-pnumlbw, -pnumsga)
 ```
 
-I use the backwards elimination to creat the optimal linear regression. Firstly, all the predictor was included to generate the linear regression. Then the less significant predictor was removed, which p-value less than SL(0.05). The final model contains babysex, bhead, blength, delwt, fincome,  
-gaweeks, mheight, mrace, parity, ppwt and smoken.
+I use the backwards elimination to creat the optimal linear regression. Firstly, all the predictor was included to generate the linear regression. Then the less significant predictor was removed, which p-value less than SL(0.05). The final model contains babysex, bhead, blength, delwt, fincome, gaweeks, mheight, mrace, parity, ppwt and smoken.
 
 ```{r fit_model}
 mult.fit = lm(bwt ~ ., data = baby_df)
@@ -145,7 +144,7 @@ weather_boot =
   unnest(results, a)
 ```
 
-Calculate $log(\beta_{0} * \beta_{1})$̂
+Calculate $log(\beta_{0} * \beta_{1})$
 
 ```{r callog}
 callog =
@@ -166,6 +165,9 @@ callog %>%
   xlab("log(B0 * B1)") +
   ggtitle("Distribution of log(B0 * B1)")
 ```
+
+It could find from the figure that the distribution of $log(\beta_{0} * \beta_{1})$ is approximately normal, when $log(\beta_{0} * \beta_{1})$ around 2.02, it has maximum density. The distribution is little right-skewed, which may be better with higher bootstrap times.
+
 
 Calculate the 95% CI
 
@@ -197,6 +199,9 @@ r_square %>%
   ggtitle("Distribution of r square")
 ```
 
+It could find from the figure that the distribution of  $r^2$ is approximately normal, when  $r^2$ around 0.91, it has maximum density. The distribution is little right-skewed, which may be better with higher bootstrap times.
+
+
 Calculate the 95% CI
 
 ```{r CI_r}
@@ -207,11 +212,7 @@ r_square %>%
   ) %>% 
   knitr::kable()
 ```
- Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂2
- and log(β̂0∗β̂1)
-. Note: broom::glance() is helpful for extracting r̂2
- from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing log(β̂0∗β̂1)
-.
-
-
+ 
+ 
+ 
 
