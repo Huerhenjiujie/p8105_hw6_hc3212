@@ -11,12 +11,16 @@ library(viridis)
 library(modelr)
 library(mgcv)
 library(MASS)
+
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 
 knitr::opts_chunk$set(
   fig.width = 8,
   fig.height =6,
-  out.width = "90%"
+  out.width = "90%",
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE
 )
 
 options(
@@ -27,42 +31,8 @@ options(
 scale_color_discrete = scale_color_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
+
 ## Problem 1
-
-In this problem, you will analyze data gathered to understand the effects of several variables on a child’s birthweight. This dataset, available here, consists of roughly 4000 children and includes the following variables:
-
-babysex: baby’s sex (male = 1, female = 2)
-bhead: baby’s head circumference at birth (centimeters)
-blength: baby’s length at birth (centimeteres)
-bwt: baby’s birth weight (grams)
-delwt: mother’s weight at delivery (pounds)
-fincome: family monthly income (in hundreds, rounded)
-frace: father’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other, 9 = Unknown)
-gaweeks: gestational age in weeks
-malform: presence of malformations that could affect weight (0 = absent, 1 = present)
-menarche: mother’s age at menarche (years)
-mheigth: mother’s height (inches)
-momage: mother’s age at delivery (years)
-mrace: mother’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other)
-parity: number of live births prior to this pregnancy
-pnumlbw: previous number of low birth weight babies
-pnumgsa: number of prior small for gestational age babies
-ppbmi: mother’s pre-pregnancy BMI
-ppwt: mother’s pre-pregnancy weight (pounds)
-smoken: average number of cigarettes smoked per day during pregnancy
-wtgain: mother’s weight gain during pregnancy (pounds)
-Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
-
-Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
-
-Compare your model to two others:
-
-One using length at birth and gestational age as predictors (main effects only)
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
-Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
-
-Note that although we expect your model to be reasonable, model building itself is not a main idea of the course and we don’t necessarily expect your model to be “optimal”.
-
 
 First import and clean the data.
 
@@ -75,42 +45,104 @@ baby_df =
     frace = as.factor(frace),
     mrace = as.factor(mrace),
   ) %>% 
-  select(-pnumlbw, -pnumsga)
+  dplyr::select(-pnumlbw, -pnumsga)
 ```
 
-I use the backwards elimination to creat the optimal linear regression
+I use the backwards elimination to creat the optimal linear regression. Firstly, all the predictor was included to generate the linear regression. Then the less significant predictor was removed, which p-value less than SL(0.05). The final model contains babysex, bhead, blength, delwt, fincome,  
+gaweeks, mheight, mrace, parity, ppwt and smoken.
 
 ```{r}
 mult.fit = lm(bwt ~ ., data = baby_df)
 summary(mult.fit)
 
-
-step.model <- stepAIC(mult.fit, direction = "both", trace = FALSE)
-summary(step.model)
+final.model <- stepAIC(mult.fit, direction = "both", trace = FALSE) 
+summary(final.model)
 ```
 
-Take out non-significant variables one at a time starting with the highest p-value, SL = 0.05
 
 ```{r}
-# No Liver
-step1 = update(mult.fit, . ~ . -Liver)
-summary(step1)
+baby_df%>% 
+  add_predictions(final.model) %>% 
+  add_residuals(final.model) %>% 
+  ggplot(aes(x = pred, y = resid, alpha = 0.1)) +
+  geom_point()
+```
 
-# No Alcmod
-step2 = update(step1, . ~ . -Alcmod)
-summary(step2)
+Compare your model to two others:
 
-# No Age
-step3 = update(step2, . ~ . -Age)
-summary(step3)
+One using length at birth and gestational age as predictors (main effects only)
+One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
 
-# No Gender
-step4 = update(step3, . ~ . -Gender)
-summary(step4)
+Compare models
 
-# just use one function
-step(mult.fit, direction='backward')
+First, sampling...
 
+```{r}
+baby_cv =
+  crossv_mc(baby_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+Next, Fit models
+
+
+```{r, eval=FALSE}
+fit_function = function(df, obser){
+
+  multi_model = mult.fit = lm(obser ~ ., data = df)
+  
+  final.model <- stepAIC(mult_model, direction = "both", trace = FALSE)
+  
+  return(final.model)
+}
+```
+
+```{r, eval=FALSE}
+fit_df =
+  baby_cv %>% 
+  mutate(
+    final_mod = map2(.x = train, .y = bwt, ~ fit_function(df = .x, obser = .y)),
+    len_mod = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    hea_mod = map(.x = train, ~lm(bwt ~ bhead + blength + babysex, data = .x))
+  ) %>% 
+  mutate(
+    rmsefinal = map2_dbl(.x = final_mod,.y = test, ~rmse(model = .x, data = .y)),
+    rmselen = map2_dbl(.x = len_mod,.y = test, ~rmse(model = .x, data = .y)),
+    rmsehea = map2_dbl(.x = hea_mod,.y = test, ~rmse(model = .x, data = .y))
+  )
+
+```
+
+```{r, eval=FALSE}
+fit_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    rmsefinal:rmsehea,
+    names_to = "model",
+    values_to = "rmse", 
+    names_prefix = "rmse"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_boxplot()
+```
+
+## Problem 2
+
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  dplyr::select(name, id, everything())
 ```
 
 
