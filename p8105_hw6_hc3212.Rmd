@@ -36,7 +36,7 @@ scale_fill_discrete = scale_fill_viridis_d
 
 First import and clean the data.
 
-```{r}
+```{r import}
 baby_df = 
   read_csv("birthweight.csv") %>% 
   drop_na() %>% 
@@ -51,7 +51,7 @@ baby_df =
 I use the backwards elimination to creat the optimal linear regression. Firstly, all the predictor was included to generate the linear regression. Then the less significant predictor was removed, which p-value less than SL(0.05). The final model contains babysex, bhead, blength, delwt, fincome,  
 gaweeks, mheight, mrace, parity, ppwt and smoken.
 
-```{r}
+```{r fit_model}
 mult.fit = lm(bwt ~ ., data = baby_df)
 summary(mult.fit)
 
@@ -60,7 +60,7 @@ summary(final.model)
 ```
 
 
-```{r}
+```{r residue_vs_fit}
 baby_df%>% 
   add_predictions(final.model) %>% 
   add_residuals(final.model) %>% 
@@ -68,16 +68,9 @@ baby_df%>%
   geom_point()
 ```
 
-Compare your model to two others:
-
-One using length at birth and gestational age as predictors (main effects only)
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
-
-Compare models
-
 First, sampling...
 
-```{r}
+```{r sampling}
 baby_cv =
   crossv_mc(baby_df, 100) %>% 
   mutate(
@@ -88,23 +81,11 @@ baby_cv =
 
 Next, Fit models
 
-
-```{r, eval=FALSE}
-fit_function = function(df, obser){
-
-  multi_model = mult.fit = lm(obser ~ ., data = df)
-  
-  final.model <- stepAIC(mult_model, direction = "both", trace = FALSE)
-  
-  return(final.model)
-}
-```
-
-```{r, eval=FALSE}
+```{r compare_fit}
 fit_df =
   baby_cv %>% 
   mutate(
-    final_mod = map2(.x = train, .y = bwt, ~ fit_function(df = .x, obser = .y)),
+    final_mod = map(.x = train, ~stepAIC(lm(bwt ~ ., data = .x), direction = "both", trace = FALSE)),
     len_mod = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = .x)),
     hea_mod = map(.x = train, ~lm(bwt ~ bhead + blength + babysex, data = .x))
   ) %>% 
@@ -116,9 +97,11 @@ fit_df =
 
 ```
 
-```{r, eval=FALSE}
+
+
+```{r boxplot}
 fit_df %>% 
-  select(starts_with("rmse")) %>% 
+  dplyr::select(starts_with("rmse")) %>% 
   pivot_longer(
     rmsefinal:rmsehea,
     names_to = "model",
@@ -126,7 +109,8 @@ fit_df %>%
     names_prefix = "rmse"
   ) %>% 
   ggplot(aes(x = model, y = rmse)) +
-  geom_boxplot()
+  geom_boxplot() +
+  scale_x_discrete(labels = c("backwards", "length and gestational", "head, length, and sex"))
 ```
 
 ## Problem 2
@@ -145,6 +129,30 @@ weather_df =
   dplyr::select(name, id, everything())
 ```
 
+let's bootstrap
+
+```{r}
+weather_boot =
+  weather_df %>% 
+  drop_na() %>% 
+  bootstrap(5000, id = "strap_number")%>% 
+  mutate(
+    models = map(.x = strap, ~lm(tmax ~ tmin, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  dplyr::select(strap_number, results) %>% 
+  unnest(results)
+```
+
+The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response and tmin as the predictor, and are interested in the distribution of two quantities estimated from these data:
+
+r̂2
+log(β̂0∗β̂1)
+Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂2
+ and log(β̂0∗β̂1)
+. Note: broom::glance() is helpful for extracting r̂2
+ from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing log(β̂0∗β̂1)
+.
 
 
 
