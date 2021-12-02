@@ -87,7 +87,7 @@ fit_df =
   mutate(
     final_mod = map(.x = train, ~stepAIC(lm(bwt ~ ., data = .x), direction = "both", trace = FALSE)),
     len_mod = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = .x)),
-    hea_mod = map(.x = train, ~lm(bwt ~ bhead + blength + babysex, data = .x))
+    hea_mod = map(.x = train, ~lm(bwt ~ bhead + blength + babysex + bhead * blength + bhead * babysex + blength * babysex + bhead * blength * babysex, data = .x))
   ) %>% 
   mutate(
     rmsefinal = map2_dbl(.x = final_mod,.y = test, ~rmse(model = .x, data = .y)),
@@ -97,7 +97,7 @@ fit_df =
 
 ```
 
-
+Draw the plot
 
 ```{r boxplot}
 fit_df %>% 
@@ -115,7 +115,7 @@ fit_df %>%
 
 ## Problem 2
 
-```{r}
+```{r import_weather}
 weather_df = 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
@@ -131,24 +131,83 @@ weather_df =
 
 let's bootstrap
 
-```{r}
+```{r bootstrap}
 weather_boot =
   weather_df %>% 
   drop_na() %>% 
   bootstrap(5000, id = "strap_number")%>% 
   mutate(
     models = map(.x = strap, ~lm(tmax ~ tmin, data = .x)),
-    results = map(models, broom::tidy)
+    results = map(models, broom::tidy),
+    a = map(models, broom::glance)
   ) %>% 
-  dplyr::select(strap_number, results) %>% 
-  unnest(results)
+  dplyr::select(strap_number, results, a) %>% 
+  unnest(results, a)
 ```
 
-The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response and tmin as the predictor, and are interested in the distribution of two quantities estimated from these data:
+Calculate $log(\beta_{0} * \beta_{1})$̂
 
-r̂2
-log(β̂0∗β̂1)
-Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂2
+```{r callog}
+callog =
+  weather_boot %>% 
+  dplyr::select(strap_number, term, estimate) %>% 
+  pivot_wider(names_from = term,
+              values_from = estimate) %>% 
+  rename(intercept ="(Intercept)") %>% 
+  mutate(logBB = log(intercept*tmin))
+```
+
+Plot the distribution of $log(\beta_{0} * \beta_{1})$
+
+```{r densi_BB}
+callog %>% 
+  ggplot(aes(x = logBB)) +
+  geom_density() + 
+  xlab("log(B0 * B1)") +
+  ggtitle("Distribution of log(B0 * B1)")
+```
+
+Calculate the 95% CI
+
+```{r CI_BB}
+callog %>% 
+  summarize(
+    ci_lower = quantile(logBB, 0.025),
+    ci_upper = quantile(logBB,0.975)
+  ) %>% 
+  knitr::kable()
+```
+
+Calculate $r^2$
+
+```{r r_square}
+r_square =
+  weather_boot %>% 
+  filter(term == "tmin") %>% 
+  dplyr::select(r.squared) 
+```
+
+Plot the distribution of  $r^2$
+
+```{r densi_r}
+r_square %>% 
+  ggplot(aes(x = r.squared)) +
+  geom_density() + 
+  xlab("r square") +
+  ggtitle("Distribution of r square")
+```
+
+Calculate the 95% CI
+
+```{r CI_r}
+r_square %>% 
+  summarize(
+    ci_lower = quantile(r.squared, 0.025),
+    ci_upper = quantile(r.squared,0.975)
+  ) %>% 
+  knitr::kable()
+```
+ Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂2
  and log(β̂0∗β̂1)
 . Note: broom::glance() is helpful for extracting r̂2
  from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing log(β̂0∗β̂1)
