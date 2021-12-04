@@ -119,6 +119,8 @@ fit_df %>%
   scale_fill_discrete(labels = c("backwards", "length and gestational", "head, length, and sex"))
 ```
 
+From the plot, the backwards model seems fit the model better, since it have the least rmse. 
+
 ## Problem 2
 
 ```{r import_weather}
