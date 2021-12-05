@@ -137,7 +137,7 @@ weather_df =
   dplyr::select(name, id, everything())
 ```
 
-let's bootstrap
+let's bootstrap and calculate
 
 ```{r bootstrap}
 weather_boot =
@@ -150,25 +150,23 @@ weather_boot =
     result_r = map(models, broom::glance)
   ) %>% 
   dplyr::select(strap_number, results, result_r) %>% 
-  unnest(results, result_r)
-```
-
-Calculate $log(\beta_{0} * \beta_{1})$
-
-```{r callog}
-callog =
-  weather_boot %>% 
-  dplyr::select(strap_number, term, estimate) %>% 
-  pivot_wider(names_from = term,
-              values_from = estimate) %>% 
-  rename(intercept ="(Intercept)") %>% 
-  mutate(logBB = log10(intercept*tmin))
+  unnest(result_r) %>% 
+  dplyr::select(strap_number, r.squared, results) %>% 
+  unnest(results) %>% 
+  group_by(strap_number) %>% 
+  mutate(
+    estimate2 = lead(estimate, n = 1),
+    logBB = log10(estimate * estimate2)
+  ) %>% 
+  filter(term == "(Intercept)") %>% 
+ dplyr:: select(strap_number, r.squared, logBB)
+  
 ```
 
 Plot the distribution of $log(\beta_{0} * \beta_{1})$
 
 ```{r densi_BB}
-callog %>% 
+weather_boot %>% 
   ggplot(aes(x = logBB)) +
   geom_density() + 
   xlab("log(B0 * B1)") +
@@ -181,7 +179,8 @@ It could find from the figure that the distribution of $log(\beta_{0} * \beta_{1
 Calculate the 95% CI
 
 ```{r CI_BB}
-callog %>% 
+weather_boot %>% 
+  ungroup(strap_number) %>% 
   summarize(
     ci_lower = quantile(logBB, 0.025),
     ci_upper = quantile(logBB,0.975)
@@ -189,19 +188,11 @@ callog %>%
   knitr::kable()
 ```
 
-Calculate $r^2$
-
-```{r r_square}
-r_square =
-  weather_boot %>% 
-  filter(term == "tmin") %>% 
-  dplyr::select(r.squared) 
-```
 
 Plot the distribution of  $r^2$
 
 ```{r densi_r}
-r_square %>% 
+weather_boot %>% 
   ggplot(aes(x = r.squared)) +
   geom_density() + 
   xlab("r square") +
@@ -214,7 +205,8 @@ It could find from the figure that the distribution of  $r^2$ is approximately n
 Calculate the 95% CI
 
 ```{r CI_r}
-r_square %>% 
+weather_boot %>% 
+  ungroup(strap_number) %>% 
   summarize(
     ci_lower = quantile(r.squared, 0.025),
     ci_upper = quantile(r.squared,0.975)
